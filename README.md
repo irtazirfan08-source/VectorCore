@@ -1,15 +1,22 @@
 # VectorCore: Low-Level Vector Search & HNSW Indexing Engine
+
 [![PyPI version](https://img.shields.io/pypi/v/vectorcore-ann.svg?color=blue)](https://pypi.org/project/vectorcore-ann/)
 [![Python versions](https://img.shields.io/pypi/pyversions/vectorcore-ann.svg)](https://pypi.org/project/vectorcore-ann/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-VectorCore is a lightweight, zero-dependency vector search engine built from scratch in Python and NumPy. It implements SIMD-friendly vector distance metrics, an exact brute-force baseline index, and a Hierarchical Navigable Small World (HNSW) graph index with binary disk serialization.
+
+VectorCore is a lightweight, zero-dependency Approximate Nearest Neighbor (ANN) vector search engine built from scratch in Python and NumPy. It implements SIMD-friendly vector distance metrics, an exact brute-force baseline index, and a Hierarchical Navigable Small World (HNSW) graph index with binary disk serialization.
+
+---
 
 ## Key Features
 
-* **Vectorized Metric Kernels**: Optimized Euclidean (L2) and Cosine distance implementations.
-* **HNSW Graph Index**: Approximate Nearest Neighbor (ANN) search using greedy graph traversal with configurable `ef_construction` and `ef_search` beam width.
-* **Exact Flat Index**: Linear-scan baseline providing 100% ground-truth recall validation.
-* **Binary Serialization**: Zero-copy disk persistence protocol (`.vcore`) preserving index topologies and high-dimensional vector embeddings.
+* **Vectorized Metric Kernels**: Optimized Euclidean ($L_2$) and Cosine distance metric routines.
+* **HNSW Graph Index**: Fast Approximate Nearest Neighbor (ANN) greedy graph traversal with configurable `ef_construction`, `M`, and `ef_search` beam width parameters.
+* **Exact Flat Index**: Exhaustive linear-scan baseline providing 100% ground-truth recall validation.
+* **Binary Serialization**: Zero-copy disk persistence protocol (`.vcore`) preserving graph topologies and vector payload matrices.
+* **Production Distribution**: Built with a standardized packaging layout, published on PyPI, and deployable via automated CI/CD pipelines.
+
+---
 
 ## Benchmark Results
 
@@ -20,12 +27,13 @@ Evaluated on 5,000 vectors (128 dimensions) queried with 100 randomized vectors 
 | **Flat (Brute-Force)** | 0.000s | 1.298 ms | 770.3 queries/s | 100.0% |
 | **HNSW (Graph ANN)** | 6.830s | **0.533 ms** | **1876.5 queries/s** | 61.3% |
 
-* **Performance Gain**: 2.44x faster search latency over brute-force linear scanning.
+* **Performance Gain**: **2.44x faster** search latency over brute-force linear scanning.
 
-## Quickstart
+---
 
-### 1. Installation
+## Installation
+
+### Via PyPI (Recommended)
+
 ```bash
-git clone [https://github.com/irtazirfan08-source/VectorCore.git](https://github.com/irtazirfan08-source/VectorCore.git)
-cd VectorCore
-pip install -r requirements.txt
+pip install vectorcore-ann
