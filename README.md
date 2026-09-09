@@ -1,5 +1,7 @@
 # VectorCore: Low-Level Vector Search & HNSW Indexing Engine
-
+[![PyPI version](https://img.shields.io/pypi/v/vectorcore-ann.svg?color=blue)](https://pypi.org/project/vectorcore-ann/)
+[![Python versions](https://img.shields.io/pypi/pyversions/vectorcore-ann.svg)](https://pypi.org/project/vectorcore-ann/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 VectorCore is a lightweight, zero-dependency vector search engine built from scratch in Python and NumPy. It implements SIMD-friendly vector distance metrics, an exact brute-force baseline index, and a Hierarchical Navigable Small World (HNSW) graph index with binary disk serialization.
 
 ## Key Features
