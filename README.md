@@ -14,7 +14,7 @@ VectorCore is a lightweight, zero-dependency Approximate Nearest Neighbor (ANN) 
 * **HNSW Graph Index**: Fast Approximate Nearest Neighbor (ANN) greedy graph traversal with configurable `ef_construction`, `M`, and `ef_search` beam width parameters.
 * **Exact Flat Index**: Exhaustive linear-scan baseline providing 100% ground-truth recall validation.
 * **Binary Serialization**: Zero-copy disk persistence protocol (`.vcore`) preserving graph topologies and vector payload matrices.
-* **Production Distribution**: Built with a standardized packaging layout, published on PyPI, and deployable via automated CI/CD pipelines.
+* **Production Distribution**: Published on PyPI as `vectorcore-ann` with automated CI/CD releases.
 
 ---
 
