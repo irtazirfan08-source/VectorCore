@@ -4,3 +4,6 @@ storage_dump/
 *.vcore
 .env
 .venv/
+dist/
+*.egg-info/
+build/
