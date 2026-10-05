@@ -1,39 +1,33 @@
 # VectorCore: Low-Level Vector Search & HNSW Indexing Engine
 
+[![CI Pipeline](https://github.com/irtazirfan08-source/VectorCore/actions/workflows/ci.yml/badge.svg)](https://github.com/irtazirfan08-source/VectorCore/actions)
 [![PyPI version](https://img.shields.io/pypi/v/vectorcore-ann.svg?color=blue)](https://pypi.org/project/vectorcore-ann/)
 [![Python versions](https://img.shields.io/pypi/pyversions/vectorcore-ann.svg)](https://pypi.org/project/vectorcore-ann/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-VectorCore is a lightweight, zero-dependency Approximate Nearest Neighbor (ANN) vector search engine built from scratch in Python and NumPy. It implements SIMD-friendly vector distance metrics, an exact brute-force baseline index, and a Hierarchical Navigable Small World (HNSW) graph index with binary disk serialization.
+VectorCore is an Approximate Nearest Neighbor (ANN) vector search engine implemented from scratch in Python and NumPy. It provides vectorized distance kernels, an exact brute-force index for ground-truth validation, and a Hierarchical Navigable Small World (HNSW) graph index with configurable beam-search parameters and binary serialization.
 
 ---
 
 ## Key Features
 
-* **Vectorized Metric Kernels**: Optimized Euclidean ($L_2$) and Cosine distance metric routines.
-* **HNSW Graph Index**: Fast Approximate Nearest Neighbor (ANN) greedy graph traversal with configurable `ef_construction`, `M`, and `ef_search` beam width parameters.
-* **Exact Flat Index**: Exhaustive linear-scan baseline providing 100% ground-truth recall validation.
-* **Binary Serialization**: Zero-copy disk persistence protocol (`.vcore`) preserving graph topologies and vector payload matrices.
-* **Production Distribution**: Published on PyPI as `vectorcore-ann` with automated CI/CD releases.
+* **Distance Metrics**: Vectorized Euclidean ($L_2$), Cosine Distance ($1 - \text{sim}$), and Inner Product / Dot Product (`ip`) kernels.
+* **HNSW Graph Index**: Logarithmic-time greedy beam search across proximity graphs with configurable `m`, `ef_construction`, and `ef_search`.
+* **Exact Flat Baseline**: Exhaustive linear scan index with dimension and contiguous memory validation providing 100% recall ground truth.
+* **Batch Retrieval API**: Vectorized multi-query execution via `batch_search(queries, k)`.
+* **CI Validation**: Automated test suite executing on GitHub Actions across Python 3.11, 3.12, and 3.13.
 
 ---
 
-## Benchmark Results
+## Empirical Benchmarks
 
-Evaluated on 5,000 vectors (128 dimensions) queried with 100 randomized vectors at $k=10$:
+Evaluated with `benchmark_compare.py` across 2,000 synthetic embeddings (64 dimensions) queried with 100 randomized queries at $k=5$ under $L_2$ distance on Python 3.13:
 
-| Index Type | Build Time | Avg Latency | Throughput (QPS) | Recall@10 |
-| :--- | :--- | :--- | :--- | :--- |
-| **Flat (Brute-Force)** | 0.000s | 1.298 ms | 770.3 queries/s | 100.0% |
-| **HNSW (Graph ANN)** | 6.830s | **0.533 ms** | **1876.5 queries/s** | 61.3% |
+| Index Type | Build Time | Query Latency | Throughput (QPS) | Recall@5 | Traversal Complexity |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **FlatIndex (Brute-Force)** | **0.0000s** | **0.469 ms** | **2,130.5 queries/s** | **100.0%** | $O(N \cdot d)$ |
+| **HNSWIndex (Graph ANN)** | 3.1730s | 0.821 ms | 1,218.2 queries/s | **84.0%** | $O(\log N \cdot d)$ |
 
-* **Performance Gain**: **2.44x faster** search latency over brute-force linear scanning.
-
----
-
-## Installation
-
-### Via PyPI (Recommended)
-
+Run benchmarks locally:
 ```bash
-pip install vectorcore-ann
+python benchmark_compare.py
