@@ -1,35 +1,66 @@
-import numpy as np
 import os
+import numpy as np
+import pytest
 from vector_core.index.hnsw import HNSWIndex
 from vector_core.storage.serializer import IndexSerializer
 
-dim = 64
-num_vectors = 500
-save_path = "storage_dump/hnsw_test.vcore"
 
-np.random.seed(42)
-vectors = np.random.randn(num_vectors, dim).astype(np.float32)
-vector_ids = list(range(1, num_vectors + 1))
+def test_hnsw_serialization_roundtrip_l2(tmp_path):
+    dim = 64
+    num_vectors = 300
+    save_path = str(tmp_path / "hnsw_test_l2.vcore")
 
-# 1. Build and save index
-print("=== [1] Building and Saving HNSW Index to Disk ===")
-index = HNSWIndex(dim=dim, metric="l2")
-index.add(ids=vector_ids, vectors=vectors)
-IndexSerializer.save(index, save_path)
-file_size_kb = os.path.getsize(save_path) / 1024
-print(f"Saved {index.count()} vectors to '{save_path}' ({file_size_kb:.2f} KB)\n")
+    np.random.seed(42)
+    vectors = np.random.randn(num_vectors, dim).astype(np.float32)
+    vector_ids = list(range(1, num_vectors + 1))
 
-# 2. Load index back from disk
-print("=== [2] Loading Index from Disk ===")
-loaded_index = IndexSerializer.load(save_path)
-print(f"Loaded successfully. Total nodes in graph: {loaded_index.count()}\n")
+    # Build and serialize
+    index = HNSWIndex(dim=dim, metric="l2", m=16, ef_construction=64, ef_search=32)
+    index.add(ids=vector_ids, vectors=vectors)
+    IndexSerializer.save(index, save_path)
 
-# 3. Verify search consistency
-query = vectors[0]
-ids_original, _ = index.search(query, k=3)
-ids_loaded, _ = loaded_index.search(query, k=3)
+    # Verify file exists on disk and is non-empty
+    assert os.path.exists(save_path)
+    assert os.path.getsize(save_path) > 0
 
-print(f"Original Index Search: {ids_original}")
-print(f"Loaded Index Search  : {ids_loaded}")
-assert ids_original == ids_loaded, "Mismatch between original and loaded index results!"
-print("✅ Disk persistence verification passed: Search outputs match 100%.")
+    # Deserialize back from disk
+    loaded_index = IndexSerializer.load(save_path)
+
+    # Validate structural properties
+    assert loaded_index.count() == index.count()
+    assert loaded_index.dim == index.dim
+    assert loaded_index.metric == index.metric
+    assert loaded_index.entry_point == index.entry_point
+
+    # Validate search consistency on indexed vectors
+    query = vectors[0]
+    orig_ids, orig_dists = index.search(query, k=5)
+    loaded_ids, loaded_dists = loaded_index.search(query, k=5)
+
+    assert orig_ids == loaded_ids
+    np.testing.assert_allclose(orig_dists, loaded_dists, rtol=1e-5, atol=1e-5)
+
+
+def test_hnsw_serialization_unseen_query_cosine(tmp_path):
+    dim = 32
+    num_vectors = 150
+    save_path = str(tmp_path / "hnsw_test_cosine.vcore")
+
+    np.random.seed(99)
+    vectors = np.random.randn(num_vectors, dim).astype(np.float32)
+    vector_ids = list(range(1, num_vectors + 1))
+
+    # Build and serialize cosine index
+    index = HNSWIndex(dim=dim, metric="cosine", m=16, ef_construction=32, ef_search=16)
+    index.add(ids=vector_ids, vectors=vectors)
+    IndexSerializer.save(index, save_path)
+
+    loaded_index = IndexSerializer.load(save_path)
+
+    # Verify identical nearest neighbor routing on unseen query
+    unseen_query = np.random.randn(dim).astype(np.float32)
+    orig_ids, orig_dists = index.search(unseen_query, k=3)
+    loaded_ids, loaded_dists = loaded_index.search(unseen_query, k=3)
+
+    assert orig_ids == loaded_ids
+    np.testing.assert_allclose(orig_dists, loaded_dists, rtol=1e-5, atol=1e-5)
