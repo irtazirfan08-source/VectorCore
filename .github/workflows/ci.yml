@@ -30,4 +30,4 @@ jobs:
 
       - name: Run PyTest Suite
         run: |
-          pytest tests/test_flat.py tests/test_hnsw.py -v
+          pytest tests/ -v
