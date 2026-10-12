@@ -105,3 +105,39 @@ def test_search_dimension_mismatch_error(client):
     response = client.post("/v1/vectors/search", json=payload)
     assert response.status_code == 400
     assert "dimension" in response.json()["detail"]
+
+
+def test_batch_search_success(client):
+    np.random.seed(42)
+    dim = 8
+    vectors = np.random.randn(15, dim).astype(np.float32).tolist()
+    vector_ids = list(range(1, 16))
+    client.post("/v1/vectors/insert", json={"vector_ids": vector_ids, "vectors": vectors})
+
+    query_batch = [vectors[0], vectors[1]]
+    payload = {"query_vectors": query_batch, "k": 2}
+    response = client.post("/v1/vectors/batch_search", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_queries"] == 2
+    assert data["total_indexed"] == 15
+    assert len(data["batch_results"]) == 2
+
+    # Query 0 top match must be vector 1 with ~0 distance
+    assert data["batch_results"][0]["ids"][0] == 1
+    assert pytest.approx(data["batch_results"][0]["distances"][0], abs=1e-5) == 0.0
+
+    # Query 1 top match must be vector 2 with ~0 distance
+    assert data["batch_results"][1]["ids"][0] == 2
+    assert pytest.approx(data["batch_results"][1]["distances"][0], abs=1e-5) == 0.0
+
+
+def test_batch_search_empty_queries_error(client):
+    vectors = [[1.0, 2.0, 3.0, 4.0]]
+    client.post("/v1/vectors/insert", json={"vector_ids": [1], "vectors": vectors})
+
+    payload = {"query_vectors": [], "k": 1}
+    response = client.post("/v1/vectors/batch_search", json=payload)
+    assert response.status_code == 400
+    assert "cannot be empty" in response.json()["detail"]

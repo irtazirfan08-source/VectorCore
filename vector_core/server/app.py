@@ -35,6 +35,11 @@ class SearchRequest(BaseModel):
     k: int = Field(default=5, ge=1, description="Number of nearest neighbors to retrieve")
 
 
+class BatchSearchRequest(BaseModel):
+    query_vectors: List[List[float]] = Field(..., description="List of query vectors")
+    k: int = Field(default=5, ge=1, description="Number of nearest neighbors to retrieve per query")
+
+
 class MatchResult(BaseModel):
     id: int
     distance: float
@@ -44,6 +49,18 @@ class SearchResponse(BaseModel):
     ids: List[int]
     distances: List[float]
     results: List[MatchResult]
+    total_indexed: int
+
+
+class SingleBatchResult(BaseModel):
+    ids: List[int]
+    distances: List[float]
+    results: List[MatchResult]
+
+
+class BatchSearchResponse(BaseModel):
+    batch_results: List[SingleBatchResult]
+    total_queries: int
     total_indexed: int
 
 
@@ -95,7 +112,6 @@ def insert_vectors(payload: InsertRequest) -> Dict[str, Any]:
     vec_array = np.array(payload.vectors, dtype=np.float32)
     dim = vec_array.shape[1]
 
-    # Initialize index on first batch if not yet created
     if index is None:
         index = HNSWIndex(
             dim=dim,
@@ -122,7 +138,7 @@ def insert_vectors(payload: InsertRequest) -> Dict[str, Any]:
 
 @app.post("/v1/vectors/search", response_model=SearchResponse, status_code=status.HTTP_200_OK)
 def search_vectors(payload: SearchRequest) -> SearchResponse:
-    """Searches for top-k nearest neighbors of the query vector."""
+    """Searches for top-k nearest neighbors of a single query vector."""
     if index is None or index.count() == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -143,6 +159,47 @@ def search_vectors(payload: SearchRequest) -> SearchResponse:
         ids=[int(i) for i in ids],
         distances=[float(d) for d in dists],
         results=matches,
+        total_indexed=index.count(),
+    )
+
+
+@app.post("/v1/vectors/batch_search", response_model=BatchSearchResponse, status_code=status.HTTP_200_OK)
+def batch_search_vectors(payload: BatchSearchRequest) -> BatchSearchResponse:
+    """Searches for top-k nearest neighbors for multiple query vectors."""
+    if index is None or index.count() == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Index is empty. Insert vectors prior to querying.",
+        )
+
+    if not payload.query_vectors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="query_vectors cannot be empty.",
+        )
+
+    queries_arr = np.array(payload.query_vectors, dtype=np.float32)
+    if queries_arr.ndim != 2 or queries_arr.shape[1] != index.dim:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Query vector dimension does not match index dimension ({index.dim})",
+        )
+
+    batch_output = []
+    for q in queries_arr:
+        ids, dists = index.search(query=q, k=payload.k)
+        matches = [MatchResult(id=int(i), distance=float(d)) for i, d in zip(ids, dists)]
+        batch_output.append(
+            SingleBatchResult(
+                ids=[int(i) for i in ids],
+                distances=[float(d) for d in dists],
+                results=matches,
+            )
+        )
+
+    return BatchSearchResponse(
+        batch_results=batch_output,
+        total_queries=len(batch_output),
         total_indexed=index.count(),
     )
 
