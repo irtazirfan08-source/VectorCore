@@ -1,5 +1,6 @@
 """FastAPI REST server for VectorCore HNSW search engine."""
 
+import os
 from typing import List, Optional, Dict, Any
 import numpy as np
 from fastapi import FastAPI, HTTPException, status
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from vector_core.index.hnsw import HNSWIndex
+from vector_core.storage.serializer import IndexSerializer
 
 app = FastAPI(
     title="VectorCore API",
@@ -14,7 +16,7 @@ app = FastAPI(
     description="High-performance vector search engine powered by HNSW indexing.",
 )
 
-# Global index instance (initialized dynamically on first insertion)
+# Global index instance (initialized dynamically on first insertion or load)
 index: Optional[HNSWIndex] = None
 INDEX_METRIC = "l2"
 INDEX_M = 16
@@ -62,6 +64,10 @@ class BatchSearchResponse(BaseModel):
     batch_results: List[SingleBatchResult]
     total_queries: int
     total_indexed: int
+
+
+class IndexFileRequest(BaseModel):
+    filepath: str = Field(..., description="Target filesystem path for the binary .vcore file")
 
 
 # ---------------- API Endpoints ----------------
@@ -202,6 +208,54 @@ def batch_search_vectors(payload: BatchSearchRequest) -> BatchSearchResponse:
         total_queries=len(batch_output),
         total_indexed=index.count(),
     )
+
+
+@app.post("/v1/index/save", status_code=status.HTTP_200_OK)
+def save_index(payload: IndexFileRequest) -> Dict[str, Any]:
+    """Serializes the active index to a binary .vcore file."""
+    if index is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot save an uninitialized index.",
+        )
+
+    os.makedirs(os.path.dirname(os.path.abspath(payload.filepath)), exist_ok=True)
+    IndexSerializer.save(index, payload.filepath)
+
+    return {
+        "status": "success",
+        "filepath": payload.filepath,
+        "count": index.count(),
+        "dimension": index.dim,
+    }
+
+
+@app.post("/v1/index/load", status_code=status.HTTP_200_OK)
+def load_index(payload: IndexFileRequest) -> Dict[str, Any]:
+    """Loads an index from a binary .vcore file into server memory."""
+    global index
+
+    if not os.path.exists(payload.filepath):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Index file '{payload.filepath}' not found.",
+        )
+
+    try:
+        index = IndexSerializer.load(payload.filepath)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deserialize index: {str(exc)}",
+        )
+
+    return {
+        "status": "success",
+        "filepath": payload.filepath,
+        "count": index.count(),
+        "dimension": index.dim,
+        "metric": index.metric,
+    }
 
 
 if __name__ == "__main__":

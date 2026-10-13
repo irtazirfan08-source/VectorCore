@@ -1,5 +1,6 @@
 """Integration tests for the VectorCore FastAPI REST API."""
 
+import os
 import pytest
 import numpy as np
 from fastapi.testclient import TestClient
@@ -61,7 +62,7 @@ def test_insert_and_stats(client):
 def test_insert_validation_mismatched_lengths(client):
     payload = {
         "vector_ids": [1, 2],
-        "vectors": [[0.1, 0.2, 0.3]],  # 2 IDs, but only 1 vector
+        "vectors": [[0.1, 0.2, 0.3]],
     }
     response = client.post("/v1/vectors/insert", json=payload)
     assert response.status_code == 400
@@ -74,10 +75,8 @@ def test_search_exact_match(client):
     vectors = np.random.randn(20, dim).astype(np.float32).tolist()
     vector_ids = list(range(100, 120))
 
-    # Insert dataset
     client.post("/v1/vectors/insert", json={"vector_ids": vector_ids, "vectors": vectors})
 
-    # Query with exact first vector
     search_payload = {"query_vector": vectors[0], "k": 3}
     search_resp = client.post("/v1/vectors/search", json=search_payload)
     assert search_resp.status_code == 200
@@ -100,7 +99,6 @@ def test_search_dimension_mismatch_error(client):
     vectors = [[1.0, 2.0, 3.0, 4.0]]
     client.post("/v1/vectors/insert", json={"vector_ids": [1], "vectors": vectors})
 
-    # Search with 3-dimensional vector on 4-dimensional index
     payload = {"query_vector": [1.0, 2.0, 3.0], "k": 1}
     response = client.post("/v1/vectors/search", json=payload)
     assert response.status_code == 400
@@ -124,11 +122,8 @@ def test_batch_search_success(client):
     assert data["total_indexed"] == 15
     assert len(data["batch_results"]) == 2
 
-    # Query 0 top match must be vector 1 with ~0 distance
     assert data["batch_results"][0]["ids"][0] == 1
     assert pytest.approx(data["batch_results"][0]["distances"][0], abs=1e-5) == 0.0
-
-    # Query 1 top match must be vector 2 with ~0 distance
     assert data["batch_results"][1]["ids"][0] == 2
     assert pytest.approx(data["batch_results"][1]["distances"][0], abs=1e-5) == 0.0
 
@@ -141,3 +136,49 @@ def test_batch_search_empty_queries_error(client):
     response = client.post("/v1/vectors/batch_search", json=payload)
     assert response.status_code == 400
     assert "cannot be empty" in response.json()["detail"]
+
+
+def test_index_save_and_load_roundtrip(client, tmp_path):
+    save_file = str(tmp_path / "server_hnsw.vcore")
+    dim = 16
+    vectors = [[float(i + j) for j in range(dim)] for i in range(5)]
+    vector_ids = [10, 20, 30, 40, 50]
+
+    # Insert data
+    client.post("/v1/vectors/insert", json={"vector_ids": vector_ids, "vectors": vectors})
+
+    # Save to disk over HTTP
+    save_resp = client.post("/v1/index/save", json={"filepath": save_file})
+    assert save_resp.status_code == 200
+    assert os.path.exists(save_file)
+    assert save_resp.json()["count"] == 5
+
+    # Wipe in-memory index
+    server_module.index = None
+
+    # Verify index is uninitialized
+    stats_before = client.get("/v1/vectors/stats").json()
+    assert stats_before["status"] == "uninitialized"
+
+    # Reload index over HTTP
+    load_resp = client.post("/v1/index/load", json={"filepath": save_file})
+    assert load_resp.status_code == 200
+    assert load_resp.json()["count"] == 5
+
+    # Verify search parity after restore
+    search_resp = client.post("/v1/vectors/search", json={"query_vector": vectors[0], "k": 1})
+    assert search_resp.status_code == 200
+    assert search_resp.json()["ids"][0] == 10
+
+
+def test_index_save_uninitialized_error(client, tmp_path):
+    save_file = str(tmp_path / "error.vcore")
+    resp = client.post("/v1/index/save", json={"filepath": save_file})
+    assert resp.status_code == 400
+    assert "uninitialized" in resp.json()["detail"]
+
+
+def test_index_load_missing_file_error(client):
+    resp = client.post("/v1/index/load", json={"filepath": "/non/existent/file.vcore"})
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"]
