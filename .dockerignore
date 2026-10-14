@@ -1,0 +1,26 @@
+# Version control
+.git
+.gitignore
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Testing & linting
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Local persistence dumps & environments
+storage_dump/
+*.bin
+*.vcore
+.venv/
+venv/
+ENV/
+.vscode/
