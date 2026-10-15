@@ -25,6 +25,9 @@ dependencies = [
     "pydantic>=2.0.0"
 ]
 
+[project.scripts]
+vectorcore = "vector_core.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/irtazirfan08-source/VectorCore"
 Repository = "https://github.com/irtazirfan08-source/VectorCore.git"
