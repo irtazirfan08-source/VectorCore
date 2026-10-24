@@ -1,34 +1,85 @@
-import urllib.request
+"""End-to-end lifecycle demonstration client for VectorCore REST API."""
+
 import json
+import os
+import urllib.request
 import numpy as np
 
-# 1. Insert 50 synthetic 128-dimensional vectors via HTTP POST
-print("=== [1] Inserting 50 Vectors into VectorCore Server ===")
-np.random.seed(42)
-vectors = np.random.randn(50, 128).tolist()
-vector_ids = list(range(1001, 1051))
+BASE_URL = "http://127.0.0.1:8001"
 
-insert_data = json.dumps({"vector_ids": vector_ids, "vectors": vectors}).encode("utf-8")
-insert_req = urllib.request.Request(
-    "http://127.0.0.1:8001/v1/vectors/insert",
-    data=insert_data,
-    headers={"Content-Type": "application/json"},
-    method="POST"
-)
 
-with urllib.request.urlopen(insert_req) as response:
-    print(response.read().decode("utf-8"))
+def post_json(endpoint: str, data: dict) -> dict:
+    """Helper to send HTTP POST requests with JSON payload."""
+    url = f"{BASE_URL}{endpoint}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
-# 2. Search for the nearest neighbors of vector #1001 (should return #1001 with distance 0.0)
-print("\n=== [2] Querying Top-3 Nearest Neighbors ===")
-search_data = json.dumps({"query_vector": vectors[0], "k": 3}).encode("utf-8")
-search_req = urllib.request.Request(
-    "http://127.0.0.1:8001/v1/vectors/search",
-    data=search_data,
-    headers={"Content-Type": "application/json"},
-    method="POST"
-)
 
-with urllib.request.urlopen(search_req) as response:
-    result = json.loads(response.read().decode("utf-8"))
-    print(json.dumps(result, indent=2))
+def get_json(endpoint: str) -> dict:
+    """Helper to send HTTP GET requests."""
+    url = f"{BASE_URL}{endpoint}"
+    with urllib.request.urlopen(url) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def main() -> None:
+    print("=== [1] Verifying Service Health & Initial Stats ===")
+    health = get_json("/health")
+    print(f"Health Status: {health}")
+    stats = get_json("/v1/vectors/stats")
+    print(f"Initial State: {stats}\n")
+
+    print("=== [2] Ingesting 50 Synthetic 128-Dimensional Vectors ===")
+    np.random.seed(42)
+    dim = 128
+    vectors = np.random.randn(50, dim).tolist()
+    vector_ids = list(range(1001, 1051))
+
+    insert_payload = {"vector_ids": vector_ids, "vectors": vectors}
+    insert_res = post_json("/v1/vectors/insert", insert_payload)
+    print(f"Insert Status: {insert_res}\n")
+
+    print("=== [3] Querying Top-3 Nearest Neighbors for Vector #1001 ===")
+    search_payload = {"query_vector": vectors[0], "k": 3}
+    search_res = post_json("/v1/vectors/search", search_payload)
+    print("Single Query Matches:")
+    print(json.dumps(search_res["results"], indent=2))
+    print()
+
+    print("=== [4] Executing Batch Search for First 2 Vectors ===")
+    batch_payload = {"query_vectors": [vectors[0], vectors[1]], "k": 2}
+    batch_res = post_json("/v1/vectors/batch_search", batch_payload)
+    print(f"Batch Search Processed {batch_res['total_queries']} queries.")
+    for idx, batch_item in enumerate(batch_res["batch_results"]):
+        print(f"  Query {idx} Top Match: ID={batch_item['ids'][0]}, Distance={batch_item['distances'][0]:.6f}")
+    print()
+
+    print("=== [5] Persisting Index Snapshot to Disk ===")
+    dump_dir = os.path.abspath("./storage_dump")
+    os.makedirs(dump_dir, exist_ok=True)
+    snapshot_path = os.path.join(dump_dir, "client_demo_index.vcore")
+
+    save_payload = {"filepath": snapshot_path}
+    save_res = post_json("/v1/index/save", save_payload)
+    print(f"Saved snapshot to: {save_res['filepath']} (Count: {save_res['count']})\n")
+
+    print("=== [6] Restoring Index Snapshot from Disk ===")
+    load_payload = {"filepath": snapshot_path}
+    load_res = post_json("/v1/index/load", load_payload)
+    print(f"Restored index: {load_res}\n")
+
+    print("=== [7] Validating Search Parity After Restoration ===")
+    verify_res = post_json("/v1/vectors/search", search_payload)
+    print(f"Top neighbor after restore: ID={verify_res['ids'][0]}, Distance={verify_res['distances'][0]:.6f}")
+    assert verify_res["ids"][0] == 1001, "Error: Index state did not match after restoration!"
+    print("\nAll lifecycle operations completed successfully.")
+
+
+if __name__ == "__main__":
+    main()
